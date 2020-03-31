@@ -24,7 +24,7 @@
 #include "utils.h"
 
 //
-#define HEADER  "Faster folder deleter, ver 0.x, freeware, https://iobureau.com/byenow\n"
+#define HEADER  "Faster folder deleter, ver 0.3, freeware, https://iobureau.com/byenow\n"
 #define SYNTAX  "Syntax: byenow.exe [options] <folder>\n" \
                 "\n" \
                 "  Deletes a folder. Similar to 'rmdir /s ...', but multi-threaded.\n" \
@@ -43,6 +43,30 @@
                 "    For local folders it doesn't make sense to go above that, but\n" \
                 "    for folders on network shares raising the thread count may be\n" \
                 "    a good thing to try, especially for high-latency connections.\n"
+
+//
+enum EXIT_CODES
+{
+	RC_ok               = 0,
+	RC_cancelled        = 1,
+	RC_whoops_seh       = 2,       // see wmain_seh()
+	RC_whoops_cpp       = 3,       // see wmain()
+	RC_unlikely         = 4,
+	RC_ok_with_errors   = 10,      // ... + log10(error_count)
+
+	// init errors
+	RC_no_path          = 50,
+	RC_invalid_arg      = 51,
+	RC_not_confirmed    = 52,
+
+	// path errors
+	RC_path_not_found   = 60,
+	RC_path_is_file     = 61,
+	RC_path_is_root     = 62,
+	RC_path_restricted  = 63,
+	RC_path_cant_expand = 64,
+	RC_path_cant_check  = 65,
+};
 
 //
 struct context : ultra_mach_cb
@@ -75,6 +99,8 @@ struct context : ultra_mach_cb
 	uint             mode;         // 0x01 - scanning, 0x02 - deleting
 	ultra_mach_info  info;
 
+	uint             exit_rc;
+
 	//
 	static context * self;
 
@@ -85,8 +111,8 @@ struct context : ultra_mach_cb
 	void parse_args(int argc, wchar_t ** argv);
 	void parse_uint(int argc, wchar_t ** argv, size_t & next, size_t & val);
 
-	void syntax();
-	void abort(const char * format, ...);
+	void syntax(int rc);
+	void abort(int rc, const char * format, ...);
 	void confirm_it();
 
 	//
@@ -127,6 +153,8 @@ context::context()
 	reported = usec();
 
 	mode = 0x00;
+
+	exit_rc = RC_ok;
 }
 
 void context::init()
@@ -138,7 +166,7 @@ void context::init()
 	if (! (ntdll.NtDeleteFile && ntdll.RtlInitUnicodeString && ntdll.RtlDosPathNameToNtPathName_U) ||
 	    ! (ntdll.NtQueryDirectoryFile))
 	{
-		abort("Failed to locate required NT API entry points.\n");
+		abort(RC_unlikely, "Failed to locate required NT API entry points.\n");
 	}
 
 	interactive = ! is_interactive_console();
@@ -197,7 +225,7 @@ void context::parse_args(int argc, wchar_t ** argv)
 			parse_uint(argc, argv, i, mach_conf.scanner_buf_size);
 			
 			if (mach_conf.scanner_buf_size > 64*1024)
-				abort("Maximum supported scan buffer size is 64MB.");
+				abort(RC_invalid_arg, "Maximum supported scan buffer size is 64MB.");
 
 			mach_conf.scanner_buf_size *= 1024;
 			continue;
@@ -216,23 +244,23 @@ void context::parse_args(int argc, wchar_t ** argv)
 		}
 
 		if (arg[0] == L'-' || arg[0] == L'/')
-			syntax();
+			syntax(RC_invalid_arg);
 
 		// otherwise it's a path
 
 		if (path.size())
-			syntax();
+			syntax(RC_invalid_arg);
 
 		path = arg;
 	}
 
 	if (path.empty())
-		syntax();
+		syntax(RC_no_path);
 
 	if (path.size() == 2 && path[1] == L':' ||
 	    path.size() == 3 && path[1] == L':' && path[2] == L'\\')
 	{
-		abort("Root of a drive is not supported as a target.");
+		abort(RC_path_is_root, "Root of a drive is not supported as a target.");
 	}
 
 	if (path.back() == L'\\')
@@ -242,35 +270,35 @@ void context::parse_args(int argc, wchar_t ** argv)
 	if (_wcsnicmp(path.c_str(), L"C:\\Windows", 10) == 0 ||
 	    _wcsnicmp(path.c_str(), L"C:\\Users", 8) == 0)
 	{
-		abort("Restricted path - %S\n", path.c_str());
+		abort(RC_path_restricted, "Restricted path - %S\n", path.c_str());
 	}
 }
 
 void context::parse_uint(int argc, wchar_t ** argv, size_t & i, size_t & val)
 {
 	if (++i == argc)
-		syntax();
+		syntax(RC_invalid_arg);
 
 	if (! swscanf(argv[i], L"%zu", &val))
-		syntax();
+		syntax(RC_invalid_arg);
 }
 
 //
-void context::syntax()
+void context::syntax(int rc)
 {
 	printf(HEADER);
 	printf(SYNTAX);
-	exit(100);
+	exit(rc);
 }
 
-void context::abort(const char * format, ...)
+void context::abort(int rc, const char * format, ...)
 {
 	va_list m;
 	printf(HEADER);
 	va_start(m, format);
 	vprintf(format, m);
 	va_end(m);
-	exit(110);
+	exit(rc);
 }
 
 void context::confirm_it()
@@ -284,14 +312,14 @@ void context::confirm_it()
 	printf("Remove [%S] and all its contents? ", path.c_str());
 	fflush(stdout);
 
-	if (! gets_s(line, sizeof line))
-		exit(120);
+	if (gets_s(line, sizeof line))
+		exit(RC_not_confirmed);
 
 	for (auto & str : yes)
 		if (! strcmp(line, str))
 			return;
 
-	exit(130);
+	exit(RC_not_confirmed);
 }
 
 //
@@ -432,7 +460,7 @@ void context::check_path()
 	if (! get_full_pathname(path, full))
 	{
 		printf("Error: failed to get full path name for [%S].\n", path.c_str());
-		exit(200);
+		exit(RC_path_cant_expand);
 	}
 
 	path = full;
@@ -448,19 +476,19 @@ void context::check_path()
 		if (__not_found(e.code))
 		{
 			printf("Error: specified path not found - [%S].\n", path.c_str());
-			exit(200);
+			exit(RC_path_not_found);
 		}
 
 		e.func = "GetFileAttributes";
 		printf("Error: %s\n", error_to_str(e).c_str());
 		printf("Path: [%S]\n", path.c_str());
-		exit(210);
+		exit(RC_path_cant_check);
 	}
 
 	if (! (path_attrs & FILE_ATTRIBUTE_DIRECTORY))
 	{
 		printf("Error: specified path points at a file - [%S]\n", path.c_str());
-		exit(220);
+		exit(RC_path_is_file);
 	}
 }
 
@@ -477,25 +505,27 @@ void context::process()
 	if (preview)
 	{
 		mode = 0x01;
-		ultra_mach_scan(root, mach_conf, this);
+
+		if (! ultra_mach_scan(root, mach_conf, this))
+			exit(enough ? RC_unlikely : RC_cancelled);
 	}
 	else
 	if (staged)
 	{
 		mode = 0x01;
 		if (! ultra_mach_scan(root, mach_conf, this))
-			exit(200);
+			exit(enough ? RC_unlikely : RC_cancelled);
 
 		mode = 0x02;
 		if (! ultra_mach_delete(root, true, mach_conf, this)) // prescanned
-			exit(210);
+			exit(enough ? RC_unlikely : RC_cancelled);
 	}
 	else
 	{
 		mode = 0x03;
 
 		if (! ultra_mach_delete(root, false, mach_conf, this)) // scan & delete
-			exit(220);
+			exit(enough ? RC_unlikely : RC_cancelled);
 	}
 
 	finished = usec();
@@ -503,8 +533,8 @@ void context::process()
 
 void context::report()
 {
-	string  elapsed = format_usecs(finished - started);
-	bool got_errors = scanner_err.size() || deleter_err.size();
+	string elapsed   = format_usecs(finished - started);
+	size_t err_count = scanner_err.size() + deleter_err.size();
 
 	if (interactive)
 	{
@@ -520,7 +550,7 @@ void context::report()
 		else
 		{
 			printf("\n");
-			if (got_errors && ! list_errors)
+			if (err_count && ! list_errors)
 				printf("Completed in %s. To list errors use '--list-errors'.\n", elapsed.c_str());
 			else
 				printf("Completed in %s.\n", elapsed.c_str());
@@ -545,8 +575,14 @@ void context::report()
 		}
 	}
 
-	if (got_errors && list_errors)
-		report_errors();
+	if (err_count)
+	{
+		if (list_errors)
+			report_errors();
+
+		for (exit_rc = RC_ok_with_errors; err_count >= 10; err_count /= 10)
+			exit_rc++;
+	}
 }
 
 //
@@ -609,5 +645,5 @@ int wmain_app(int argc, wchar_t ** argv)
 
 	x.report();
 
-	return 0;
+	return x.exit_rc;
 }

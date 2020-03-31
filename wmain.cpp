@@ -35,7 +35,7 @@ int wmain_app(int argc, wchar_t ** argv);
 
 int wmain_seh(int argc, wchar_t ** argv)
 {
-	int r = -1;
+	int r = 3; // RC_whoops_seh
 
 	__try_seh_exceptions__
 	{
@@ -48,7 +48,7 @@ int wmain_seh(int argc, wchar_t ** argv)
 
 int wmain(int argc, wchar_t ** argv)
 {
-	int r = -1;
+	int r = 4; // RC_whoops_cpp
 
 	__try_cpp_exceptions__
 	{
