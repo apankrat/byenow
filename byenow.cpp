@@ -312,7 +312,7 @@ void context::confirm_it()
 	printf("Remove [%S] and all its contents? ", path.c_str());
 	fflush(stdout);
 
-	if (gets_s(line, sizeof line))
+	if (! gets_s(line, sizeof line))
 		exit(RC_not_confirmed);
 
 	for (auto & str : yes)
