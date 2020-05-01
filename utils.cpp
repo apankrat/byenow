@@ -28,7 +28,7 @@ string format_count(uint64_t val, const char * unit)
 
 string format_bytes(uint64_t bytes)
 {
-	if (bytes < 64*__KB) return stringf("%I64u", bytes);
+	if (bytes < 64*__KB) return stringf("%I64u B", bytes);
 	if (bytes <  2*__MB) return stringf("%.1lf KB", bytes/(double)__KB);
 	if (bytes <  2*__GB) return stringf("%.1lf MB", bytes/(double)__MB);
 	if (bytes <  2*__TB) return stringf("%.1lf GB", bytes/(double)__GB);

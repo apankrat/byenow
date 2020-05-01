@@ -24,7 +24,7 @@
 #include "utils.h"
 
 //
-#define HEADER  "Faster folder deleter, ver 0.3, freeware, https://iobureau.com/byenow\n"
+#define HEADER  "Faster folder deleter, ver 0.5, freeware, https://iobureau.com/byenow\n"
 #define SYNTAX  "Syntax: byenow.exe [options] <folder>\n" \
                 "\n" \
                 "  Deletes a folder. Similar to 'rmdir /s ...', but multi-threaded.\n" \
@@ -33,6 +33,7 @@
                 "  -s --staged            enumerate contents first, then delete them\n" \
                 "\n" \
                 "  -1 --one-liner         show progress as a single line\n" \
+                "  -b --show-bytes        show total/deleted byte counts\n" \
                 "  -e --list-errors       list all errors upon completion\n" \
                 "  -y --yes               don't ask to confirm the deletion\n" \
                 "\n" \
@@ -81,6 +82,7 @@ struct context : ultra_mach_cb
 
 	ultra_mach_conf  mach_conf;
 	bool             cryptic;
+	bool             show_bytes;
 	bool             list_errors;
 
 	// state
@@ -120,6 +122,9 @@ struct context : ultra_mach_cb
 	void init_progress();
 	void update_progress();
 
+	void print_verbose_stats(bool scan);
+	void print_cryptic_stats();
+
 	void check_path();
 	void process();
 
@@ -136,12 +141,13 @@ context * context::self = NULL;
 
 //
 context::context()
-{ 
+{
 	preview = false;
 	staged  = false;
 	confirm = true;
 
 	cryptic = false;
+	show_bytes = false;
 	list_errors = false;
 
 	interactive = false;
@@ -208,6 +214,12 @@ void context::parse_args(int argc, wchar_t ** argv)
 			continue;
 		}
 
+		if (! wcscmp(arg, L"-b") || ! wcscmp(arg, L"--show-bytes"))
+		{
+			show_bytes = true;
+			continue;
+		}
+
 		if (! wcscmp(arg, L"-e") || ! wcscmp(arg, L"--list-errors"))
 		{
 			list_errors = true;
@@ -223,7 +235,6 @@ void context::parse_args(int argc, wchar_t ** argv)
 		if (! wcscmp(arg, L"--scan-buf-kb"))
 		{
 			parse_uint(argc, argv, i, mach_conf.scanner_buf_size);
-			
 			if (mach_conf.scanner_buf_size > 64*1024)
 				abort(RC_invalid_arg, "Maximum supported scan buffer size is 64MB.");
 
@@ -367,7 +378,7 @@ bool context::on_ultra_mach_tick(const ultra_mach_info & _info)
 		info.f_deleted = _info.f_deleted;
 		info.d_deleted = _info.d_deleted;
 		info.done      = _info.done;
-	}	
+	}
 	else
 	{
 		assert(false);
@@ -388,7 +399,8 @@ void context::init_progress()
 	{
 		printf("%s [%S] %s\n", preview ? "Scanning" : "Deleting", path.c_str(), (staged && ! preview) ? "[staged]" : "");
 		printf("\n");
-		printf("           %10s  %10s  %10s\n", "Folders", "Files", "Errors");
+		if (show_bytes) printf("           %10s  %10s  %10s  %10s\n", "Folders", "Files", "Bytes", "Errors");
+		else            printf("           %10s  %10s  %10s\n",       "Folders", "Files",          "Errors");
 	}
 
 	if (! interactive)
@@ -396,8 +408,16 @@ void context::init_progress()
 
 	if (! cryptic)
 	{
-		printf("  Found    %10s  %10s  %10s\n", "-", "-", "-");
-		printf("  Deleted  %10s  %10s  %10s\n", "-", "-", "-");
+		if (show_bytes)
+		{
+			printf("  Found    %10s  %10s  %10s  %10s\n", "-", "-", "-", "-");
+			printf("  Deleted  %10s  %10s  %10s  %10s\n", "-", "-", "-", "-");
+		}
+		else
+		{
+			printf("  Found    %10s  %10s  %10s\n", "-", "-", "-");
+			printf("  Deleted  %10s  %10s  %10s\n", "-", "-", "-");
+		}
 	}
 	else
 	{
@@ -412,21 +432,11 @@ void context::update_progress()
 	if (now - reported < 100*1000 && ! info.done)
 		return;
 
-	/*
-	 *	one-liner
-	 *
-	 * 	%u / %u folders, %u / %u files, %u / %u errors
-	 */
 	if (cryptic)
 	{
 		move_console_cursor(0, false, -1, true);
-		printf("%zu / %zu folders, %zu / %zu files, %zu / %zu errors", 
-			info.d_found, info.d_deleted,
-			info.f_found, info.f_deleted,
-			scanner_err.size(), deleter_err.size());
 
-		if (info.folders_togo) printf(" - %zu to go", info.folders_togo);
-
+		print_cryptic_stats();
 		wipe_console_line();
 		printf("\n");
 	}
@@ -434,15 +444,13 @@ void context::update_progress()
 	{
 		move_console_cursor(0, false, -2, true);
 
-		printf("  Found    %10zu  %10zu  %10zu", info.d_found, info.f_found, scanner_err.size());
-		if (info.folders_togo) printf("    [%zu to go]", info.folders_togo);
-
+		print_verbose_stats(true);
 		wipe_console_line();
 		printf("\n");
 
 		if (! preview)
 		{
-			printf("  Deleted  %10zu  %10zu  %10zu", info.d_deleted, info.f_deleted, deleter_err.size());
+			print_verbose_stats(false);
 			wipe_console_line();
 		}
 
@@ -450,6 +458,37 @@ void context::update_progress()
 	}
 
 	reported = now;
+}
+
+void context::print_verbose_stats(bool scan)
+{
+	const char * label = scan ? "  Found  " : "  Deleted";
+	const size_t & d = scan ? info.d_found : info.d_deleted;
+	const size_t & f = scan ? info.f_found : info.f_deleted;
+	const size_t & b = scan ? info.b_found : info.b_deleted;
+	const size_t   e = scan ? scanner_err.size() : deleter_err.size();
+
+	if (show_bytes) printf("%s  %10zu  %10zu  %10s  %10zu", label, d, f, format_bytes(b).c_str(), e);
+	else            printf("%s  %10zu  %10zu  %10zu", label, d, f, e);
+	if (scan && info.folders_togo) printf("    [%zu to go]", info.folders_togo);
+}
+
+void context::print_cryptic_stats()
+{
+	if (show_bytes)
+		printf("%zu / %zu folders, %zu / %zu files, %s / %s, %zu / %zu errors",
+			info.d_found, info.d_deleted,
+			info.f_found, info.f_deleted,
+			format_bytes(info.b_found).c_str(),
+			format_bytes(info.b_deleted).c_str(),
+			scanner_err.size(), deleter_err.size());
+	else
+		printf("%zu / %zu folders, %zu / %zu files, %zu / %zu errors",
+			info.d_found, info.d_deleted,
+			info.f_found, info.f_deleted,
+			scanner_err.size(), deleter_err.size());
+
+	if (info.folders_togo) printf(" - %zu to go", info.folders_togo);
 }
 
 //
@@ -541,11 +580,9 @@ void context::report()
 		if (cryptic)
 		{
 			move_console_cursor(0, false, -1, true);
-			printf("%zu / %zu folders, %zu / %zu files, %zu / %zu errors, done in %s\n", 
-				info.d_found, info.d_deleted,
-				info.f_found, info.f_deleted,
-				scanner_err.size(), deleter_err.size(),
-				elapsed.c_str());
+			print_cryptic_stats();
+			wipe_console_line();
+			printf(" - done in %s\n", elapsed.c_str());
 		}
 		else
 		{
@@ -553,25 +590,22 @@ void context::report()
 			if (err_count && ! list_errors)
 				printf("Completed in %s. To list errors use '--list-errors'.\n", elapsed.c_str());
 			else
-				printf("Completed in %s.\n", elapsed.c_str());
+				printf("Completed in %s\n", elapsed.c_str());
 		}
 	}
 	else
 	{
 		if (cryptic)
 		{
-			printf("%zu / %zu folders, %zu / %zu files, %zu / %zu errors, done in %s\n", 
-				info.d_found, info.d_deleted,
-				info.f_found, info.f_deleted,
-				scanner_err.size(), deleter_err.size(),
-				elapsed.c_str());
+			print_cryptic_stats();
+			printf(" - done in %s\n", elapsed.c_str());
 		}
 		else
 		{
-			printf("  Found    %10zu  %10zu  %10zu\n", info.d_found, info.f_found, scanner_err.size());
-			printf("  Deleted  %10zu  %10zu  %10zu\n", info.d_deleted, info.f_deleted, deleter_err.size());
+			print_verbose_stats(true);
+			print_verbose_stats(false);
 			printf("\n");
-			printf("Completed in %s.\n", elapsed.c_str());
+			printf("Completed in %s\n", elapsed.c_str());
 		}
 	}
 

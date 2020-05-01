@@ -26,8 +26,9 @@ struct ultra_mach_conf
 
 struct ultra_mach_info
 {
-	size_t  f_found, f_deleted;
-	size_t  d_found, d_deleted;
+	size_t    d_found, d_deleted;
+	size_t    f_found, f_deleted;
+	uint64_t  b_found, b_deleted;
 
 	api_error_vec * scanner_err;
 	api_error_vec * deleter_err;

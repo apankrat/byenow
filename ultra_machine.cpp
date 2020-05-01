@@ -32,8 +32,9 @@ ultra_mach_conf::ultra_mach_conf()
 //
 ultra_mach_info::ultra_mach_info()
 {
-	f_found = f_deleted = 0;
 	d_found = d_deleted = 0;
+	f_found = f_deleted = 0;
+	b_found = b_deleted = 0;
 
 	scanner_err = NULL;
 	deleter_err = NULL;
@@ -63,7 +64,6 @@ void ultra_task::execute()
 	if (phase == 1)
 	{
 		// scan folder
-
 		scan_folder_nt(path, mach->conf.scanner_buf_size, this, this);
 	}
 	else
@@ -99,7 +99,10 @@ void ultra_task::do_delete_file(const fsi_item & f)
 	wstring file = path + L'\\' + f.name;
 
 	if (delete_file(file, f.info.attrs, mach->conf.deleter_ntapi, this))
+	{
 		atomic_inc(&mach->info.f_deleted);
+		atomic_add(&mach->info.b_deleted, f.info.bytes);
+	}
 
 	atomic_dec(&curr->items);
 }
@@ -122,6 +125,7 @@ bool ultra_task::on_fsi_scan_f(const fsi_name & name, const fsi_info & info, con
 	if (e.code) errors.push_back(e);
 
 	atomic_inc(&mach->info.f_found);
+	atomic_add(&mach->info.b_found, info.bytes);
 	return true;
 }
 
