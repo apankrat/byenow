@@ -8,13 +8,12 @@
  *	BSD license with the Commons Clause condition. See LICENSE
  *	file for details.
  */
-#ifndef _BYENOW_UTILS_H_
-#define _BYENOW_UTILS_H_
+#ifndef _NUKE_UTILS_H_
+#define _NUKE_UTILS_H_
 
 #include "libp/types.h"
+#include "libp/api_error.h"
 #include "libp/_windows.h"
-#include "libp/_wstring.h"
-#include "libp/_api_error.h"
 
 //
 #define __not_found(err)      ( ((err) == ERROR_FILE_NOT_FOUND) || ((err) == ERROR_PATH_NOT_FOUND) )

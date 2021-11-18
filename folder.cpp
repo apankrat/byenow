@@ -16,9 +16,9 @@ fsi_item::fsi_item()
 	info.clear();
 }
 
-fsi_item::fsi_item(const fsi_name & _name, const fsi_info & _info)
+fsi_item::fsi_item(const wc_range & _name, const fsi_info & _info)
 {
-	name.assign(_name.data, _name.size);
+	_name.to_str(name);
 	info = _info;
 }
 

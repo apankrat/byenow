@@ -13,7 +13,7 @@
 
 #include "delete_file.h"
 
-#include "libp/assert.h"
+#include "libp/enforce.h"
 #include "libp/atomic.h"
 
 #include "libp/_elpify.h"
@@ -57,14 +57,14 @@ ultra_task::ultra_task(ultra_mach * _mach)
 //
 void ultra_task::execute()
 {
-	assert(curr && errors.empty());
+	__enforce(curr && errors.empty());
 
 	path = curr->get_path();
 
 	if (phase == 1)
 	{
 		// scan folder
-		scan_folder_nt(path, mach->conf.scanner_buf_size, this, this);
+		scan_folder_nt(path.c_str(), mach->conf.scanner_buf_size, this, this);
 	}
 	else
 	if (phase == 2)
@@ -74,7 +74,7 @@ void ultra_task::execute()
 		if (ph2_first == 0 && ph2_count == -1)
 			ph2_count = curr->files.size();
 
-		assert(ph2_first + ph2_count <= curr->files.size());
+		__enforce(ph2_first + ph2_count <= curr->files.size());
 
 		for (size_t i = 0; i < ph2_count && ! mach->enough; i++)
 		{
@@ -88,7 +88,7 @@ void ultra_task::execute()
 	}
 	else
 	{
-		assert(false);
+		__enforce(false);
 	}
 
 	path.clear();
@@ -117,32 +117,30 @@ void ultra_task::do_delete_self()
 }
 
 //
-bool ultra_task::on_fsi_scan_f(const fsi_name & name, const fsi_info & info, const api_error & e)
+bool ultra_task::on_fsi_scan(const wc_range & name, const fsi_info & info)
 {
-	curr->files.push_back( fsi_item(name, info) );
-	curr->items++;
+	if (info.attrs & FILE_ATTRIBUTE_DIRECTORY)
+	{
+		folder * sub;
 
-	if (e.code) errors.push_back(e);
+		sub = new folder();
+		sub->parent = curr;
+		sub->self = fsi_item(name, info);
 
-	atomic_inc(&mach->info.f_found);
-	atomic_add(&mach->info.b_found, info.bytes);
-	return true;
-}
+		curr->folders.push_back(sub);
+		curr->items++;
 
-bool ultra_task::on_fsi_scan_d(const fsi_name & name, const fsi_info & info, const api_error & e)
-{
-	folder * sub;
+		atomic_inc(&mach->info.d_found);
+	}
+	else
+	{
+		curr->files.push_back( fsi_item(name, info) );
+		curr->items++;
 
-	sub = new folder();
-	sub->parent = curr;
-	sub->self = fsi_item(name, info);
+		atomic_inc(&mach->info.f_found);
+		atomic_add(&mach->info.b_found, info.bytes);
+	}
 
-	curr->folders.push_back(sub);
-	curr->items++;
-
-	if (e.code) errors.push_back(e);
-
-	atomic_inc(&mach->info.d_found);
 	return true;
 }
 
@@ -163,7 +161,7 @@ ultra_task_pool::ultra_task_pool()
 
 ultra_task_pool::~ultra_task_pool()
 {
-	assert( unused() );
+	__enforce( unused() );
 	for (auto & x : cache) delete x;
 }
 
@@ -275,7 +273,7 @@ void ultra_mach::enqueue_ph2(folder * x)
 
 void ultra_mach::enqueue_ph3(folder * x)
 {
-	assert(x->items == 0);
+	__enforce(x->items == 0);
 
 	x->items = -1; // being deleted
 
@@ -286,8 +284,8 @@ void ultra_mach::enqueue_ph3(folder * x)
 //
 void ultra_mach::complete_ph1(ultra_task * w)
 {
-	assert(! enough);
-	assert(w->phase == 1);
+	__enforce(! enough);
+	__enforce(w->phase == 1);
 
 	// w->curr scanned
 
@@ -325,8 +323,8 @@ void ultra_mach::complete_ph1(ultra_task * w)
 
 void ultra_mach::complete_ph2(ultra_task * w)
 {
-	assert(! enough);
-	assert(w->phase == 2);
+	__enforce(! enough);
+	__enforce(w->phase == 2);
 
 	// w->curr->files deleted
 
@@ -352,8 +350,8 @@ void ultra_mach::complete_ph2(ultra_task * w)
 
 void ultra_mach::complete_ph3(ultra_task * w)
 {
-	assert(! enough);
-	assert(w->phase == 3);
+	__enforce(! enough);
+	__enforce(w->phase == 3);
 
 	// w->curr deleted
 
@@ -392,7 +390,7 @@ void ultra_mach::loop()
 			case 1: complete_ph1(w); break;
 			case 2: complete_ph2(w); break;
 			case 3: complete_ph3(w); break;
-			default: assert(false);
+			default: __enforce(false);
 			}
 		}
 
@@ -414,7 +412,7 @@ bool ultra_mach_scan(folder & root, const ultra_mach_conf & conf, ultra_mach_cb 
 	ultra_mach  mach;
 
 	//
-	assert(! root.self.name.empty()); // path is set
+	__enforce(! root.self.name.empty()); // path is set
 
 	if (! mach.init(conf, cb))
 		return false;
@@ -439,7 +437,7 @@ bool ultra_mach_delete(folder & root, const ultra_mach_conf & conf, ultra_mach_c
 	work_item_vec  out;
 
 	//
-	assert(! root.self.name.empty()); // path is set
+	__enforce(! root.self.name.empty()); // path is set
 
 	if (! mach.init(conf, cb))
 		return false;
@@ -470,7 +468,7 @@ bool ultra_mach_scan_and_delete(folder & root, const ultra_mach_conf & conf, ult
 	ultra_mach  mach;
 
 	//
-	assert(! root.self.name.empty()); // path is set
+	__enforce(! root.self.name.empty()); // path is set
 
 	if (! mach.init(conf, cb))
 		return false;

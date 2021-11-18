@@ -9,7 +9,7 @@
  *	file for details.
  */
 #include "libp/_windows.h"
-#include "libp/assert.h"
+#include "libp/enforce.h"
 
 /*
  *

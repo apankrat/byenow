@@ -9,15 +9,14 @@
  *	file for details.
  */
 #include "libp/types.h"
-#include "libp/stringf.h"
+#include "libp/string_utils.h"
 #include "libp/assert.h"
 #include "libp/atomic.h"
 #include "libp/_windows.h"
-#include "libp/_wstring.h"
 #include "libp/_elpify.h"
 #include "libp/_console.h"
 #include "libp/_filesys.h"
-#include "libp/_ext_system_api.h"
+#include "libp/_system_api.h"
 #include "libp/time.h"
 
 #include "ultra_machine.h"
@@ -79,6 +78,7 @@ struct context : ultra_mach_cb
 	bool             preview;      // scan only
 	bool             staged;       // scan, then delete
 	bool             confirm;      // confirm delete
+	bool             yolo;         // don't block deletion in c:\windows and c:\users
 
 	ultra_mach_conf  mach_conf;
 	bool             cryptic;
@@ -145,6 +145,7 @@ context::context()
 	preview = false;
 	staged  = false;
 	confirm = true;
+	yolo    = false;
 
 	cryptic = false;
 	show_bytes = false;
@@ -208,6 +209,12 @@ void context::parse_args(int argc, wchar_t ** argv)
 			continue;
 		}
 
+		if (! wcscmp(arg, L"-x") || ! wcscmp(arg, L"--yolo"))
+		{
+			yolo = true;
+			continue;
+		}
+
 		if (! wcscmp(arg, L"-1") || ! wcscmp(arg, L"--one-liner"))
 		{
 			cryptic = true;
@@ -235,6 +242,7 @@ void context::parse_args(int argc, wchar_t ** argv)
 		if (! wcscmp(arg, L"--scan-buf-kb"))
 		{
 			parse_uint(argc, argv, i, mach_conf.scanner_buf_size);
+
 			if (mach_conf.scanner_buf_size > 64*1024)
 				abort(RC_invalid_arg, "Maximum supported scan buffer size is 64MB.");
 
@@ -281,7 +289,8 @@ void context::parse_args(int argc, wchar_t ** argv)
 	if (_wcsnicmp(path.c_str(), L"C:\\Windows", 10) == 0 ||
 	    _wcsnicmp(path.c_str(), L"C:\\Users", 8) == 0)
 	{
-		abort(RC_path_restricted, "Restricted path - %S\n", path.c_str());
+		if (! yolo)
+			abort(RC_path_restricted, "Restricted path - %S\n", path.c_str());
 	}
 }
 
@@ -470,6 +479,7 @@ void context::print_verbose_stats(bool scan)
 
 	if (show_bytes) printf("%s  %10zu  %10zu  %10s  %10zu", label, d, f, format_bytes(b).c_str(), e);
 	else            printf("%s  %10zu  %10zu  %10zu", label, d, f, e);
+
 	if (scan && info.folders_togo) printf("    [%zu to go]", info.folders_togo);
 }
 

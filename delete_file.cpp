@@ -11,7 +11,8 @@
 #include "delete_file.h"
 
 #include "libp/_elpify.h"
-#include "libp/_ext_system_api.h"
+#include "libp/_system_api.h"
+#include "libp/_ntstatus.h"
 
 #define HSRO (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_HIDDEN)
 

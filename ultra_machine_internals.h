@@ -8,8 +8,8 @@
  *	BSD license with the Commons Clause condition. See LICENSE
  *	file for details.
  */
-#ifndef _ULTRA_MACHINE_INTERNALS_H_
-#define _ULTRA_MACHINE_INTERNALS_H_
+#ifndef _ULTRA_MACHINE_INTERNAL_H_
+#define _ULTRA_MACHINE_INTERNAL_H_
 
 #include "ultra_machine.h"
 #include "libp/_simple_work_queue.h"
@@ -34,8 +34,8 @@ struct ultra_task : work_item, fsi_scan_cb, api_error_cb
 	/*
 	 *	fsi_scan_cb
 	 */
-	bool on_fsi_scan_f(const fsi_name & name, const fsi_info & info, const api_error & e);
-	bool on_fsi_scan_d(const fsi_name & name, const fsi_info & info, const api_error & e);
+	void on_fsi_open(HANDLE h) { }
+	bool on_fsi_scan(const wc_range & name, const fsi_info & info);
 
 	/*
 	 *	api_error_cb
@@ -93,8 +93,6 @@ struct ultra_mach
 	//
 	ultra_mach();
 	~ultra_mach();
-
-	__no_copying(ultra_mach);
 
 	bool init(const ultra_mach_conf & conf, ultra_mach_cb * cb);
 	void term();

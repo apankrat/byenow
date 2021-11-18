@@ -8,12 +8,11 @@
  *	BSD license with the Commons Clause condition. See LICENSE
  *	file for details.
  */
-#ifndef _FOLDER_H_
-#define _FOLDER_H_
+#ifndef _ULTRA_FOLDER_H_
+#define _ULTRA_FOLDER_H_
 
 #include "libp/types.h"
-#include "libp/_wstring.h"
-#include "libp/_api_error.h"
+#include "libp/api_error.h"
 #include "libp/_scan_folder_nt.h"
 
 //
@@ -29,7 +28,7 @@ struct fsi_item
 	fsi_info  info;
 
 	fsi_item();
-	fsi_item(const fsi_name & name, const fsi_info & info);
+	fsi_item(const wc_range & name, const fsi_info & info);
 };
 
 typedef vector<fsi_item> fsi_item_vec;
@@ -48,8 +47,6 @@ struct folder
 	//
 	folder();
 	~folder();
-
-	__no_copying(folder);
 
 	wstring get_path() const;
 	void census(folder_vec & vec);
