@@ -23,7 +23,7 @@
 #include "utils.h"
 
 //
-#define HEADER  "Faster folder deleter, ver 0.5, freeware, https://iobureau.com/byenow\n"
+#define HEADER  "Faster folder deleter, ver 0.7, freeware, https://iobureau.com/byenow\n"
 #define SYNTAX  "Syntax: byenow.exe [options] <folder>\n" \
                 "\n" \
                 "  Deletes a folder. Similar to 'rmdir /s ...', but multi-threaded.\n" \
@@ -35,6 +35,7 @@
                 "  -b --show-bytes        show total/deleted byte counts\n" \
                 "  -e --list-errors       list all errors upon completion\n" \
                 "  -y --yes               don't ask to confirm the deletion\n" \
+                "  -x --yolo              don't block deletion in restricted paths\n" \
                 "\n" \
                 "  -t --thread <count>    use specified number of threads\n" \
                 "  -n --delete-ntapi      use NtDeleteFile to remove files\n" \
@@ -74,6 +75,7 @@ struct context : ultra_mach_cb
 	// config
 
 	wstring          path;
+	string           path_utf8;
 
 	bool             preview;      // scan only
 	bool             staged;       // scan, then delete
@@ -183,6 +185,8 @@ void context::init()
 		SetConsoleCtrlHandler(on_console_event_proxy, TRUE);
 		show_console_cursor(false);
 	}
+
+	SetConsoleOutputCP(CP_UTF8);
 }
 
 void context::parse_args(int argc, wchar_t ** argv)
@@ -286,11 +290,14 @@ void context::parse_args(int argc, wchar_t ** argv)
 		path.pop_back();
 
 	//
+	path_utf8 = to_utf8(path);
+
+	//
 	if (_wcsnicmp(path.c_str(), L"C:\\Windows", 10) == 0 ||
 	    _wcsnicmp(path.c_str(), L"C:\\Users", 8) == 0)
 	{
 		if (! yolo)
-			abort(RC_path_restricted, "Restricted path - %S\n", path.c_str());
+			abort(RC_path_restricted, "Restricted path - %s\n", path_utf8.c_str());
 	}
 }
 
@@ -329,7 +336,7 @@ void context::confirm_it()
 	if (preview || ! confirm)
 		return;
 
-	printf("Remove [%S] and all its contents? ", path.c_str());
+	printf("Remove [%s] and all its contents? ", path_utf8.c_str());
 	fflush(stdout);
 
 	if (! gets_s(line, sizeof line))
@@ -406,7 +413,7 @@ void context::init_progress()
 {
 	if (! cryptic)
 	{
-		printf("%s [%S] %s\n", preview ? "Scanning" : "Deleting", path.c_str(), (staged && ! preview) ? "[staged]" : "");
+		printf("%s [%s] %s\n", preview ? "Scanning" : "Deleting", path_utf8.c_str(), (staged && ! preview) ? "[staged]" : "");
 		printf("\n");
 		if (show_bytes) printf("           %10s  %10s  %10s  %10s\n", "Folders", "Files", "Bytes", "Errors");
 		else            printf("           %10s  %10s  %10s\n",       "Folders", "Files",          "Errors");
@@ -508,7 +515,7 @@ void context::check_path()
 
 	if (! get_full_pathname(path, full))
 	{
-		printf("Error: failed to get full path name for [%S].\n", path.c_str());
+		printf("Error: failed to get full path name for [%s].\n", path_utf8.c_str());
 		exit(RC_path_cant_expand);
 	}
 
@@ -524,19 +531,19 @@ void context::check_path()
 		e.code = GetLastError();
 		if (__not_found(e.code))
 		{
-			printf("Error: specified path not found - [%S].\n", path.c_str());
+			printf("Error: specified path not found - [%s].\n", path_utf8.c_str());
 			exit(RC_path_not_found);
 		}
 
 		e.func = "GetFileAttributes";
 		printf("Error: %s\n", error_to_str(e).c_str());
-		printf("Path: [%S]\n", path.c_str());
+		printf("Path: [%s]\n", path_utf8.c_str());
 		exit(RC_path_cant_check);
 	}
 
 	if (! (path_attrs & FILE_ATTRIBUTE_DIRECTORY))
 	{
-		printf("Error: specified path points at a file - [%S]\n", path.c_str());
+		printf("Error: specified path points at a file - [%s]\n", path_utf8.c_str());
 		exit(RC_path_is_file);
 	}
 }
@@ -655,13 +662,13 @@ void context::report_errors()
 	{
 		if (e.code != current)
 		{
-			const char * fmt = (e.code < 0x10000000) ? "  Code %lu - %S\n" : "  Code %08lx - %S\n";
+			const char * fmt = (e.code < 0x10000000) ? "  Code %lu - %s\n" : "  Code %08lx - %s\n";
 			wstring desc;
 
 			if (! get_error_desc(e.code, desc))
 				desc = L"<no description available>";
 
-			printf(fmt, e.code, desc.c_str());
+			printf(fmt, e.code, to_utf8(desc).c_str());
 
 			current = e.code;
 		}
