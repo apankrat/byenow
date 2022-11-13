@@ -1,7 +1,7 @@
 /*
  *	This file is a part of the source code of "byenow" program.
  *
- *	Copyright (c) 2020 Alexander Pankratov and IO Bureau SA.
+ *	Copyright (c) 2020- Alexander Pankratov and IO Bureau SA.
  *	All rights reserved.
  *
  *	The source code is distributed under the terms of 2-clause 
@@ -20,10 +20,11 @@
 #include "libp/time.h"
 
 #include "ultra_machine.h"
+#include "delete_file.h"
 #include "utils.h"
 
 //
-#define HEADER  "Faster folder deleter, ver 0.7, freeware, https://iobureau.com/byenow\n"
+#define HEADER  "Faster folder deleter, ver 0.8, freeware, https://iobureau.com/byenow\n"
 #define SYNTAX  "Syntax: byenow.exe [options] <folder>\n" \
                 "\n" \
                 "  Deletes a folder. Similar to 'rmdir /s ...', but multi-threaded.\n" \
@@ -36,6 +37,7 @@
                 "  -e --list-errors       list all errors upon completion\n" \
                 "  -y --yes               don't ask to confirm the deletion\n" \
                 "  -x --yolo              don't block deletion in restricted paths\n" \
+                "  -o --omni-delete       allow <folder> to point at a file\n" \
                 "\n" \
                 "  -t --thread <count>    use specified number of threads\n" \
                 "  -n --delete-ntapi      use NtDeleteFile to remove files\n" \
@@ -81,6 +83,7 @@ struct context : ultra_mach_cb
 	bool             staged;       // scan, then delete
 	bool             confirm;      // confirm delete
 	bool             yolo;         // don't block deletion in c:\windows and c:\users
+	bool             omni;         // path can point at a file
 
 	ultra_mach_conf  mach_conf;
 	bool             cryptic;
@@ -94,6 +97,7 @@ struct context : ultra_mach_cb
 
 	folder           root;
 	dword            path_attrs;
+	bool             is_a_file;
 	api_error_vec    scanner_err;
 	api_error_vec    deleter_err;
 	usec_t           started;
@@ -129,6 +133,7 @@ struct context : ultra_mach_cb
 
 	void check_path();
 	void process();
+	void delete_file();
 
 	void report();
 	void report_errors();
@@ -148,6 +153,7 @@ context::context()
 	staged  = false;
 	confirm = true;
 	yolo    = false;
+	omni    = false;
 
 	cryptic = false;
 	show_bytes = false;
@@ -156,6 +162,7 @@ context::context()
 	interactive = false;
 	enough = false;
 	path_attrs = 0;
+	is_a_file = false;
 
 	started.raw = 0;
 	finished.raw = 0;
@@ -216,6 +223,12 @@ void context::parse_args(int argc, wchar_t ** argv)
 		if (! wcscmp(arg, L"-x") || ! wcscmp(arg, L"--yolo"))
 		{
 			yolo = true;
+			continue;
+		}
+
+		if (! wcscmp(arg, L"-o") || ! wcscmp(arg, L"--omni-delete"))
+		{
+			omni = true;
 			continue;
 		}
 
@@ -336,7 +349,9 @@ void context::confirm_it()
 	if (preview || ! confirm)
 		return;
 
-	printf("Remove [%s] and all its contents? ", path_utf8.c_str());
+	if (! is_a_file) printf("Remove [%s] and all its contents? ", path_utf8.c_str());
+	else             printf("Delete [%s] file? ", path_utf8.c_str());
+
 	fflush(stdout);
 
 	if (! gets_s(line, sizeof line))
@@ -352,7 +367,7 @@ void context::confirm_it()
 //
 BOOL __stdcall context::on_console_event_proxy(dword type)
 {
-	assert(context::self);
+	__assert(context::self);
 	return context::self->on_console_event(type);
 }
 
@@ -397,7 +412,7 @@ bool context::on_ultra_mach_tick(const ultra_mach_info & _info)
 	}
 	else
 	{
-		assert(false);
+		__assert(false);
 	}
 
 	if (_info.scanner_err) append(scanner_err, *_info.scanner_err);
@@ -541,7 +556,9 @@ void context::check_path()
 		exit(RC_path_cant_check);
 	}
 
-	if (! (path_attrs & FILE_ATTRIBUTE_DIRECTORY))
+	is_a_file = ! (path_attrs & FILE_ATTRIBUTE_DIRECTORY);
+
+	if (is_a_file && ! omni)
 	{
 		printf("Error: specified path points at a file - [%s]\n", path_utf8.c_str());
 		exit(RC_path_is_file);
@@ -558,6 +575,11 @@ void context::process()
 
 	init_progress();
 
+	if (is_a_file)
+	{
+		delete_file();
+	}
+	else
 	if (preview)
 	{
 		mode = 0x01;
@@ -579,12 +601,45 @@ void context::process()
 	else
 	{
 		mode = 0x03;
-
 		if (! ultra_mach_delete(root, false, mach_conf, this)) // scan & delete
 			exit(enough ? RC_unlikely : RC_cancelled);
 	}
 
 	finished = usec();
+}
+
+void context::delete_file()
+{
+	api_error_trace  err;
+	WIN32_FIND_DATA  data;
+	ultra_mach_info  temp;
+
+	mode = preview ? 0x01 : 0x03;
+
+	temp.f_found = 1;
+
+	if (! get_file_info(path, data, &err))
+	{
+		temp.scanner_err = &err.all;
+		goto out;
+	}
+
+	info.b_found = data.nFileSizeHigh;
+	info.b_found <<= 32;
+	info.b_found += data.nFileSizeLow;
+	on_ultra_mach_tick(temp);
+
+	if (! ::delete_file(path, data.dwFileAttributes, mach_conf.deleter_ntapi, &err))
+	{
+		temp.deleter_err = &err.all;
+		goto out;
+	}
+
+	info.f_deleted = 1;
+	info.b_deleted += info.b_found;
+
+out:
+	on_ultra_mach_tick(temp);
 }
 
 void context::report()
