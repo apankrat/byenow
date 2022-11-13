@@ -1,7 +1,7 @@
 /*
  *	This file is a part of the source code of "byenow" program.
  *
- *	Copyright (c) 2020 Alexander Pankratov and IO Bureau SA.
+ *	Copyright (c) 2020- Alexander Pankratov and IO Bureau SA.
  *	All rights reserved.
  *
  *	The source code is distributed under the terms of 2-clause 
