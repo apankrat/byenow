@@ -10,7 +10,7 @@
  */
 #include "libp/types.h"
 #include "libp/string_utils.h"
-#include "libp/assert.h"
+#include "libp/enforce.h"
 #include "libp/atomic.h"
 #include "libp/_windows.h"
 #include "libp/_elpify.h"
@@ -24,7 +24,7 @@
 #include "utils.h"
 
 //
-#define HEADER  "Faster folder deleter, ver 0.8, freeware, https://iobureau.com/byenow\n"
+#define HEADER  "Faster folder deleter, ver 0.9, freeware, https://iobureau.com/byenow\n"
 #define SYNTAX  "Syntax: byenow.exe [options] <folder>\n" \
                 "\n" \
                 "  Deletes a folder. Similar to 'rmdir /s ...', but multi-threaded.\n" \
@@ -179,8 +179,11 @@ void context::init()
 
 	init_ext_system_api(NULL);
 
-	if (! (ntdll.NtDeleteFile && ntdll.RtlInitUnicodeString && ntdll.RtlDosPathNameToNtPathName_U) ||
-	    ! (ntdll.NtQueryDirectoryFile))
+	if (! ntdll.NtQueryDirectoryFile ||
+	    ! ntdll.NtDeleteFile ||
+	    ! ntdll.RtlInitUnicodeString ||
+	    ! ntdll.RtlDosPathNameToNtPathName_U_WithStatus ||
+	    ! ntdll.RtlFreeUnicodeString)
 	{
 		abort(RC_unlikely, "Failed to locate required NT API entry points.\n");
 	}
@@ -367,7 +370,7 @@ void context::confirm_it()
 //
 BOOL __stdcall context::on_console_event_proxy(dword type)
 {
-	__assert(context::self);
+	__enforce(context::self);
 	return context::self->on_console_event(type);
 }
 
@@ -412,7 +415,7 @@ bool context::on_ultra_mach_tick(const ultra_mach_info & _info)
 	}
 	else
 	{
-		__assert(false);
+		__enforce(false);
 	}
 
 	if (_info.scanner_err) append(scanner_err, *_info.scanner_err);
