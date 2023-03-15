@@ -37,7 +37,7 @@ bool delete_file_ntapi(const wstring & file, dword attrs, api_error_cb * err)
 	OBJECT_ATTRIBUTES  attr;
 	NTSTATUS           status;
 
-	status = ntdll.RtlDosPathNameToNtPathName_U_WithStatus(file.c_str(), &name, NULL, NULL);
+	status = ntdll.RtlDosPathNameToNtPathName_U_WithStatus(elpify(file).c_str(), &name, NULL, NULL);
 	if (status != STATUS_SUCCESS)
 	{
 		__on_api_error_ex("RtlDosPathNameToNtPathName_U", status, file);

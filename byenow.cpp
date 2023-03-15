@@ -24,7 +24,7 @@
 #include "utils.h"
 
 //
-#define HEADER  "Faster folder deleter, ver 0.9, freeware, https://iobureau.com/byenow\n"
+#define HEADER  "Faster folder deleter, ver 0.10, freeware, https://iobureau.com/byenow\n"
 #define SYNTAX  "Syntax: byenow.exe [options] <folder>\n" \
                 "\n" \
                 "  Deletes a folder. Similar to 'rmdir /s ...', but multi-threaded.\n" \

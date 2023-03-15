@@ -13,7 +13,6 @@
 //
 fsi_item::fsi_item()
 {
-	info.clear();
 }
 
 fsi_item::fsi_item(const wc_range & _name, const fsi_info & _info)
