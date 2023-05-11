@@ -20,6 +20,7 @@ struct ultra_mach_conf
 	size_t  scanner_buf_size;
 	bool    deleter_ntapi;
 	size_t  deleter_batch;
+	bool    keep_root;
 
 	ultra_mach_conf();
 };

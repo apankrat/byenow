@@ -27,6 +27,7 @@ ultra_mach_conf::ultra_mach_conf()
 	scanner_buf_size = 0;
 	deleter_ntapi = false;
 	deleter_batch = 128;
+	keep_root = false;
 }
 
 //
@@ -274,6 +275,10 @@ void ultra_mach::enqueue_ph2(folder * x)
 void ultra_mach::enqueue_ph3(folder * x)
 {
 	__enforce(x->items == 0);
+
+	// don't delete the root folder if asked
+	if (! x->parent && conf.keep_root)
+		return;
 
 	x->items = -1; // being deleted
 

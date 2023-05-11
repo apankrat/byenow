@@ -24,7 +24,7 @@
 #include "utils.h"
 
 //
-#define HEADER  "Faster folder deleter, ver 0.10, freeware, https://iobureau.com/byenow\n"
+#define HEADER  "Faster folder deleter, ver 0.11, freeware, https://iobureau.com/byenow\n"
 #define SYNTAX  "Syntax: byenow.exe [options] <folder>\n" \
                 "\n" \
                 "  Deletes a folder. Similar to 'rmdir /s ...', but multi-threaded.\n" \
@@ -37,7 +37,9 @@
                 "  -e --list-errors       list all errors upon completion\n" \
                 "  -y --yes               don't ask to confirm the deletion\n" \
                 "  -x --yolo              don't block deletion in restricted paths\n" \
+                "\n" \
                 "  -o --omni-delete       allow <folder> to point at a file\n" \
+                "  -k --keep-folder       don't delete the folder itself, just its contents\n" \
                 "\n" \
                 "  -t --thread <count>    use specified number of threads\n" \
                 "  -n --delete-ntapi      use NtDeleteFile to remove files\n" \
@@ -232,6 +234,12 @@ void context::parse_args(int argc, wchar_t ** argv)
 		if (! wcscmp(arg, L"-o") || ! wcscmp(arg, L"--omni-delete"))
 		{
 			omni = true;
+			continue;
+		}
+
+		if (! wcscmp(arg, L"-k") || ! wcscmp(arg, L"--keep-folder"))
+		{
+			mach_conf.keep_root = true;
 			continue;
 		}
 
@@ -631,6 +639,9 @@ void context::delete_file()
 	info.b_found <<= 32;
 	info.b_found += data.nFileSizeLow;
 	on_ultra_mach_tick(temp);
+
+	if (preview)
+		return;
 
 	if (! ::delete_file(path, data.dwFileAttributes, mach_conf.deleter_ntapi, &err))
 	{
