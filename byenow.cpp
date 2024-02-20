@@ -24,7 +24,7 @@
 #include "utils.h"
 
 //
-#define HEADER  "Faster folder deleter, ver 0.11, freeware, https://iobureau.com/byenow\n"
+#define HEADER  "Faster folder deleter, ver 0.12, freeware, https://iobureau.com/byenow\n"
 #define SYNTAX  "Syntax: byenow.exe [options] <folder>\n" \
                 "\n" \
                 "  Deletes a folder. Similar to 'rmdir /s ...', but multi-threaded.\n" \
@@ -41,7 +41,7 @@
                 "  -o --omni-delete       allow <folder> to point at a file\n" \
                 "  -k --keep-folder       don't delete the folder itself, just its contents\n" \
                 "\n" \
-                "  -t --thread <count>    use specified number of threads\n" \
+                "  -t --threads <count>   use specified number of threads\n" \
                 "  -n --delete-ntapi      use NtDeleteFile to remove files\n" \
                 "\n" \
                 "  * By default the thread count is set to the number of CPU cores.\n" \
